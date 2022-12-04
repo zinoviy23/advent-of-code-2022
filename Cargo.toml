@@ -2,5 +2,6 @@
 members = [
     "advent_util",
     "day1",
-    "day2"
+    "day2",
+    "day3"
 ]

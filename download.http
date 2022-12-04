@@ -13,3 +13,11 @@ Cookie: session={{session}}
 > check.js
 
 >>! {{$projectRoot}}/day2/input.txt
+
+### Day 3
+GET https://adventofcode.com/2022/day/3/input
+Cookie: session={{session}}
+
+> check.js
+
+>>! {{$projectRoot}}/day3/input.txt
