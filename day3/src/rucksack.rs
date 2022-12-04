@@ -82,11 +82,24 @@ impl Compartment {
     fn contains(&self, item: &Item) -> bool {
         self.items[item.as_index()] != 0
     }
+
+    fn intersect(&self, other: &Compartment) -> Compartment {
+        let mut items = [0 as u32; SIZE];
+
+        for item in self.iter_types() {
+            if other.contains(&item) {
+                items[item.as_index()] = 1;
+            }
+        }
+
+        Compartment { items }
+    }
 }
 
 pub struct Rucksack {
     first: Compartment,
     second: Compartment,
+    items: Compartment,
 }
 
 impl Rucksack {
@@ -94,7 +107,12 @@ impl Rucksack {
         let (first, second) = s.split_at(s.len() / 2);
         let first = Compartment::new(first);
         let second = Compartment::new(second);
-        Self { first, second }
+        let items = Compartment::new(s);
+        Self {
+            first,
+            second,
+            items,
+        }
     }
 
     pub fn wrong_item_priority(&self) -> u32 {
@@ -104,6 +122,16 @@ impl Rucksack {
             }
         }
         panic!("Rucksack do not contain a wrong item type");
+    }
+
+    pub fn badge_priority(&self, other1: &Rucksack, other2: &Rucksack) -> u32 {
+        let intersection = self.items.intersect(&other1.items);
+        let result_intersection = intersection.intersect(&other2.items);
+        let badge = result_intersection
+            .iter_types()
+            .next()
+            .expect("Group doesn't contain badge");
+        return badge.priority();
     }
 }
 
