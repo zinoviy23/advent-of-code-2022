@@ -14,5 +14,7 @@ fn main() {
         .collect::<Vec<_>>();
 
     let player_score: u32 = games.iter().map(|game| game.player_score()).sum();
+    let player_strategy_score: u32 = games.iter().map(|game| game.score_with_guessing()).sum();
     println!("Player score for strategy: {}", player_score);
+    println!("Player score with strategy: {}", player_strategy_score);
 }
