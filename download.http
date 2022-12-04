@@ -1,0 +1,15 @@
+### Day 1
+GET https://adventofcode.com/2022/day/1/input
+Cookie: session={{session}}
+
+> check.js
+
+>>! {{$projectRoot}}/day1/input.txt
+
+### Day 2
+GET https://adventofcode.com/2022/day/2/input
+Cookie: session={{session}}
+
+> check.js
+
+>>! {{$projectRoot}}/day2/input.txt
