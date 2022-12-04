@@ -3,9 +3,19 @@
 version = 3
 
 [[package]]
+name = "advent_util"
+version = "0.1.0"
+
+[[package]]
 name = "day1"
 version = "0.1.0"
+dependencies = [
+ "advent_util",
+]
 
 [[package]]
 name = "day2"
 version = "0.1.0"
+dependencies = [
+ "advent_util",
+]

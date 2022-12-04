@@ -1,3 +1,5 @@
 target/
 http-client.private.env.json
 **/input.txt
+ijhttp
+reports

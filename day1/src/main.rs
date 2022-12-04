@@ -1,11 +1,7 @@
-use std::fs::File;
-use std::io::Read;
+use advent_util::read_input;
 
 fn main() {
-    let mut input_file = File::open("day1/input.txt")
-        .expect("Download file with 'download.http'");
-    let mut input = String::new();
-    input_file.read_to_string(&mut input).expect("Cannot read");
+    let input = read_input(1).unwrap();
 
     let elf_snacks = input.split("\n")
         .fold(vec![], |mut acc, line| {
