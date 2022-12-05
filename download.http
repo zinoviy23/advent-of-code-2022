@@ -1,31 +1,44 @@
 ### Day 1
-GET https://adventofcode.com/2022/day/1/input
+< extract.js
+GET https://{{urlPrefix}}/1/input
 Cookie: session={{session}}
 
 > check.js
 
->>! {{$projectRoot}}/day1/input.txt
+>>! {{$projectRoot}}/{{dayN}}/input.txt
 
 ### Day 2
-GET https://adventofcode.com/2022/day/2/input
+< extract.js
+GET https://{{urlPrefix}}/2/input
 Cookie: session={{session}}
 
 > check.js
 
->>! {{$projectRoot}}/day2/input.txt
+>>! {{$projectRoot}}/{{dayN}}/input.txt
 
 ### Day 3
-GET https://adventofcode.com/2022/day/3/input
+< extract.js
+GET https://{{urlPrefix}}/3/input
 Cookie: session={{session}}
 
 > check.js
 
->>! {{$projectRoot}}/day3/input.txt
+>>! {{$projectRoot}}/{{dayN}}/input.txt
 
 ### Day 4
-GET https://adventofcode.com/2022/day/4/input
+< extract.js
+GET https://{{urlPrefix}}/4/input
 Cookie: session={{session}}
 
 > check.js
 
->>! {{$projectRoot}}/day4/input.txt
+>>! {{$projectRoot}}/{{dayN}}/input.txt
+
+### Day 5
+< extract.js
+GET https://{{urlPrefix}}/5/input
+Cookie: session={{session}}
+
+> check.js
+
+>>! {{$projectRoot}}/{{dayN}}/input.txt
