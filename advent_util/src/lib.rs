@@ -1,6 +1,8 @@
 use std::fs::File;
 use std::io::Read;
 
+pub mod slices;
+
 pub fn read_input(day: u8) -> Result<String, String> {
     let mut input_file = File::open(format!("day{}/input.txt", day))
         .map_err(|_| format!("Download file to day{} with 'download.http'", day))?;

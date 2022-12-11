@@ -69,3 +69,12 @@ Cookie: session={{session}}
 > check.js
 
 >>! {{$projectRoot}}/{{dayN}}/input.txt
+
+### Day 9
+< extract.js
+GET https://{{urlPrefix}}/9/input
+Cookie: session={{session}}
+
+> check.js
+
+>>! {{$projectRoot}}/{{dayN}}/input.txt
