@@ -40,6 +40,17 @@ impl FromStr for Instruction {
     }
 }
 
+const CRT_WIDTH: i32 = 40;
+
+fn cycle_to_column(cycle: i32) -> i32 {
+    let rem = cycle % CRT_WIDTH;
+    if rem != 0 {
+        rem
+    } else {
+        CRT_WIDTH
+    }
+}
+
 pub struct Cpu;
 
 impl Cpu {
@@ -54,7 +65,15 @@ impl Cpu {
                 if signal_strength_cycles.contains(&cycle) {
                     signal_strength += cycle * register;
                 }
+                if (register..register + 3).contains(&cycle_to_column(cycle)) {
+                    print!("#");
+                } else {
+                    print!(".")
+                }
                 cycle += 1;
+                if (cycle - 1) % 40 == 0 {
+                    println!();
+                }
             }
             instruction.apply_to_register(&mut register);
         }
