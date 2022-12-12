@@ -1,5 +1,5 @@
 use crate::keep_away::KeepAway;
-use crate::monkeys::Monkey;
+use crate::monkeys::{Monkey, WorryReduction};
 use advent_util::read_input;
 
 mod keep_away;
@@ -17,14 +17,17 @@ fn main() {
     // dbg!(&monkeys);
 
     let monkey_business = {
-        let mut keep_away = KeepAway::new(&mut monkeys);
-        keep_away.play(20, true)
+        let mut keep_away = KeepAway::new(&mut monkeys, WorryReduction::BoringMonkey);
+        keep_away.play(20)
     };
     println!("Monkey business: {}", monkey_business);
 
     let monkey_business = {
-        let mut keep_away = KeepAway::new(&mut other_monkeys);
-        keep_away.play(NEW_GAME, false)
+        let module = WorryReduction::ModuleOperation(
+            other_monkeys.iter().map(|m| m.get_throw_test()).product(),
+        );
+        let mut keep_away = KeepAway::new(&mut other_monkeys, module);
+        keep_away.play(NEW_GAME)
     };
     println!(
         "Monkey business after {} rounds: {}",

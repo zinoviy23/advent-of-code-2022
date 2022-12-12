@@ -1,9 +1,9 @@
-use crate::monkeys::Monkey;
+use crate::monkeys::{Monkey, WorryReduction};
 
 #[derive(Debug)]
 pub struct KeepAway<'a> {
     monkeys: &'a mut [Monkey],
-    module: u64,
+    worry_reduction: WorryReduction,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -12,16 +12,14 @@ struct Statistics {
 }
 
 impl<'a> KeepAway<'a> {
-    pub fn new(monkeys: &'a mut [Monkey]) -> Self {
-        let module = monkeys
-            .iter()
-            .map(|monkey| monkey.get_throw_test())
-            .product();
-        // dbg!(module);
-        Self { monkeys, module }
+    pub fn new(monkeys: &'a mut [Monkey], worry_reduction: WorryReduction) -> Self {
+        Self {
+            monkeys,
+            worry_reduction,
+        }
     }
 
-    pub fn play(&mut self, rounds: usize, became_bored: bool) -> usize {
+    pub fn play(&mut self, rounds: usize) -> usize {
         let mut statistics = vec![Statistics::default(); self.monkeys.len()];
         for _ in 0..rounds {
             for monkey_id in 0..self.monkeys.len() {
@@ -30,7 +28,7 @@ impl<'a> KeepAway<'a> {
 
                     let (new, new_monkey) = {
                         let monkey = &self.monkeys[monkey_id];
-                        let new = monkey.execute_operation(item, became_bored, self.module);
+                        let new = monkey.execute_operation(item, self.worry_reduction);
                         let new_monkey = monkey.next_monkey(new);
                         (new, new_monkey)
                     };

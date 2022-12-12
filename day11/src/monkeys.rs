@@ -14,16 +14,12 @@ impl Monkey {
         &mut self.items
     }
 
-    pub fn execute_operation(&self, item: u64, became_bored: bool, module: u64) -> u64 {
+    pub fn execute_operation(&self, item: u64, worry_reduction: WorryReduction) -> u64 {
         let new = match self.operation.arg {
             OpArg::Old => self.operation.op.execute(item, item),
             OpArg::Int(arg) => self.operation.op.execute(item, arg),
         };
-        if became_bored {
-            new / 3
-        } else {
-            new % module
-        }
+        worry_reduction.reduce_worry(new)
     }
 
     pub fn next_monkey(&self, item: u64) -> usize {
@@ -71,6 +67,21 @@ pub struct ThrowCondition {
     test: u64,
     monkey_success_id: usize,
     monkey_failure_id: usize,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum WorryReduction {
+    BoringMonkey,
+    ModuleOperation(u64),
+}
+
+impl WorryReduction {
+    fn reduce_worry(&self, worry: u64) -> u64 {
+        match self {
+            WorryReduction::BoringMonkey => worry / 3,
+            WorryReduction::ModuleOperation(module) => worry % module,
+        }
+    }
 }
 
 impl FromStr for Monkey {
