@@ -1,18 +1,14 @@
-use crate::cave::{fill_cave_with_sand_completely, move_sand, render_cave, Cave, CaveStatistics};
-use advent_util::read_input;
-use bevy::diagnostic::{
-    EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin,
+use crate::cave::{
+    fill_cave_with_sand_completely, move_sand, render_cave, Cave, CaveCache, CaveStatistics,
 };
-use bevy::math::vec3;
+use advent_util::read_input;
 use bevy::prelude::{
-    App, Camera3dBundle, Commands, CoreStage, DirectionalLight, DirectionalLightBundle, Msaa,
-    Plugin, PluginGroup, Quat, Query, ResMut, StartupStage, SystemStage, Transform,
-    WindowDescriptor, WindowPlugin,
+    App, Camera2dBundle, Commands, CoreStage, Msaa, Plugin, PluginGroup, Query, ResMut,
+    StartupStage, SystemStage, WindowDescriptor, WindowPlugin,
 };
 use bevy::time::FixedTimestep;
 use bevy::DefaultPlugins;
 use std::env;
-use std::f32::consts::PI;
 
 mod cave;
 
@@ -48,10 +44,11 @@ impl Plugin for CavePlugin {
                         .with_system(move_sand),
                 )
                 .add_system(fill_cave_with_sand_completely)
-                .add_plugin(FrameTimeDiagnosticsPlugin::default())
-                .add_plugin(LogDiagnosticsPlugin::default())
-                .add_plugin(EntityCountDiagnosticsPlugin::default())
-                .insert_resource(CaveStatistics::new());
+                // .add_plugin(FrameTimeDiagnosticsPlugin::default())
+                // .add_plugin(LogDiagnosticsPlugin::default())
+                // .add_plugin(EntityCountDiagnosticsPlugin::default())
+                .insert_resource(CaveStatistics::new())
+                .insert_resource(CaveCache::default());
         } else {
             app.insert_resource(CaveStatistics::new())
                 .add_stage(
@@ -83,19 +80,7 @@ impl Plugin for CavePlugin {
 }
 
 fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera3dBundle {
-        transform: Transform::from_translation(vec3(0., 0., 42f32)),
-        ..Default::default()
-    });
-    commands.spawn(DirectionalLightBundle {
-        directional_light: DirectionalLight::default(),
-        transform: Transform {
-            translation: vec3(0., 2., 0.),
-            rotation: Quat::from_rotation_x(-PI / 4.),
-            ..Default::default()
-        },
-        ..Default::default()
-    });
+    commands.spawn(Camera2dBundle::default());
 }
 
 fn read_cave(mut commands: Commands) {

@@ -1,10 +1,11 @@
 use array2d::Array2D;
 use bevy::math::{vec2, vec3};
-use bevy::prelude::shape::{Cube, Quad};
+use bevy::prelude::shape::Quad;
 use bevy::prelude::{
-    info, Assets, Color, Commands, Component, Entity, Mesh, Mut, PbrBundle, Query, Res, ResMut,
-    Resource, StandardMaterial, Time, Transform, With, Without,
+    info, Assets, Color, ColorMaterial, Commands, Component, Entity, Handle, Mesh, Mut, Query, Res,
+    ResMut, Resource, Time, Transform, With, Without,
 };
+use bevy::sprite::MaterialMesh2dBundle;
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
@@ -51,7 +52,7 @@ pub struct Cave {
     additional_chunks: BTreeMap<usize, BTreeMap<usize, CaveChunk>>,
 }
 
-const SIZE: f32 = 0.2;
+const SIZE: f32 = 3.;
 
 impl Cave {
     pub fn render(&self) -> String {
@@ -291,14 +292,13 @@ pub fn render_cave(
     mut commands: Commands,
     caves: Query<&Cave>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    let mesh = meshes.add(Mesh::from(Cube { size: SIZE }));
-    let material = materials.add(StandardMaterial {
-        metallic: 0.,
-        reflectance: 0.,
-        ..Color::rgb(0.9, 0.4, 0.4).into()
-    });
+    let mesh = meshes.add(Mesh::from(Quad {
+        size: vec2(SIZE, SIZE),
+        flip: false,
+    }));
+    let material = materials.add(Color::rgb(0.9, 0.4, 0.4).into());
 
     for cave in caves.iter() {
         info!("rendering cave");
@@ -308,9 +308,9 @@ pub fn render_cave(
                 let (x, y) =
                     cave.table_coord_to_world((row_index, column_index + cave.rect_x_shift));
                 if let CaveChunk::Wall = chunk {
-                    commands.spawn(PbrBundle {
+                    commands.spawn(MaterialMesh2dBundle {
                         transform: Transform::from_translation(vec3(x, y, 0.)),
-                        mesh: mesh.clone(),
+                        mesh: mesh.clone().into(),
                         material: material.clone(),
                         ..Default::default()
                     });
@@ -392,13 +392,48 @@ pub struct NeedsToBeFilled;
 #[derive(Component)]
 pub struct FilledCave;
 
+#[derive(Resource, Default)]
+pub struct CaveCache {
+    mesh: Option<Handle<Mesh>>,
+    sand_material: Option<Handle<ColorMaterial>>,
+}
+
+impl CaveCache {
+    fn get_mesh<F>(&mut self, mesh_provider: F) -> Handle<Mesh>
+    where
+        F: FnOnce() -> Handle<Mesh>,
+    {
+        if let Some(mesh) = &self.mesh {
+            mesh.clone()
+        } else {
+            let mesh = mesh_provider();
+            self.mesh = Some(mesh.clone());
+            mesh.clone()
+        }
+    }
+
+    fn get_sand_material<F>(&mut self, material_provider: F) -> Handle<ColorMaterial>
+    where
+        F: FnOnce() -> Handle<ColorMaterial>,
+    {
+        if let Some(material) = &self.sand_material {
+            material.clone()
+        } else {
+            let material = material_provider();
+            self.sand_material = Some(material.clone());
+            material.clone()
+        }
+    }
+}
+
 pub fn move_sand(
     mut commands: Commands,
     mut caves: Query<(Entity, &mut Cave), Without<NeedsToBeFilled>>,
     mut moving_sand: Query<(Entity, &mut MovingSand, &mut Transform)>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
     mut cave_statistics: ResMut<CaveStatistics>,
+    mut cave_cache: ResMut<CaveCache>,
 ) {
     for (cave_entity, mut cave) in caves.iter_mut() {
         let mut any = false;
@@ -432,6 +467,7 @@ pub fn move_sand(
                 &mut meshes,
                 &mut materials,
                 &mut cave,
+                &mut cave_cache,
                 (0, 500),
             );
         }
@@ -445,8 +481,9 @@ pub fn fill_cave_with_sand_completely(
     mut commands: Commands,
     mut caves: Query<(Entity, &mut Cave), (With<NeedsToBeFilled>, Without<FilledCave>)>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
     mut cave_statistics: ResMut<CaveStatistics>,
+    mut cave_cache: ResMut<CaveCache>,
 ) {
     let amount_to_check = (time.delta_seconds() * MOVE_SAND_AT_ONCE as f32).ceil() as usize;
     for (entity, mut cave) in caves.iter_mut() {
@@ -459,8 +496,16 @@ pub fn fill_cave_with_sand_completely(
                     }
                     MoveStatus::Stop => {
                         if sand.row == 0 && sand.column == 500 {
-                            dbg!("Here!");
                             commands.entity(entity).insert(FilledCave);
+
+                            spawn_sand(
+                                &mut commands,
+                                &mut meshes,
+                                &mut materials,
+                                &mut cave,
+                                &mut cave_cache,
+                                (sand.row, sand.column),
+                            );
 
                             cave_statistics.at_all = cave.sand_total();
                             info!("Cannot add new sand at all");
@@ -478,6 +523,7 @@ pub fn fill_cave_with_sand_completely(
                 &mut meshes,
                 &mut materials,
                 &mut cave,
+                &mut cave_cache,
                 (sand.row, sand.column),
             );
         }
@@ -487,22 +533,24 @@ pub fn fill_cave_with_sand_completely(
 fn spawn_sand(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<StandardMaterial>>,
+    materials: &mut ResMut<Assets<ColorMaterial>>,
     cave: &mut Mut<Cave>,
+    cave_cache: &mut ResMut<CaveCache>,
     (row, column): (usize, usize),
 ) {
     let (x, y) = cave.table_coord_to_world((row, column));
     commands.spawn((
-        PbrBundle {
-            mesh: meshes.add(Mesh::from(Quad {
-                size: vec2(SIZE, SIZE),
-                flip: false,
-            })),
-            material: materials.add(StandardMaterial {
-                metallic: 0.,
-                reflectance: 0.,
-                ..Color::rgb(0.4, 0.9, 0.4).into()
-            }),
+        MaterialMesh2dBundle {
+            mesh: cave_cache
+                .get_mesh(|| {
+                    meshes.add(Mesh::from(Quad {
+                        size: vec2(SIZE, SIZE),
+                        flip: false,
+                    }))
+                })
+                .into(),
+            material: cave_cache
+                .get_sand_material(|| materials.add(Color::rgb(0.4, 0.9, 0.4).into())),
             transform: Transform::from_translation(vec3(x, y, SIZE)),
             ..Default::default()
         },
