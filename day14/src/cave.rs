@@ -1,10 +1,11 @@
 use array2d::Array2D;
-use bevy::math::vec3;
-use bevy::prelude::shape::{Cube, UVSphere};
+use bevy::math::{vec2, vec3};
+use bevy::prelude::shape::{Cube, Quad};
 use bevy::prelude::{
-    info, Assets, Color, Commands, Component, Entity, Mesh, PbrBundle, Query, ResMut,
-    StandardMaterial, Transform,
+    info, Assets, Color, Commands, Component, Entity, Mesh, Mut, PbrBundle, Query, Res, ResMut,
+    Resource, StandardMaterial, Time, Transform, With, Without,
 };
+use std::collections::BTreeMap;
 use std::str::FromStr;
 
 #[derive(Debug)]
@@ -47,6 +48,7 @@ pub struct Cave {
     visible_rect: Array2D<CaveChunk>,
     rect_x_shift: usize,
     filled_with_sand: bool,
+    additional_chunks: BTreeMap<usize, BTreeMap<usize, CaveChunk>>,
 }
 
 const SIZE: f32 = 0.2;
@@ -65,32 +67,76 @@ impl Cave {
         let y_shift = self.visible_rect.column_len() as f32 / 2.;
 
         (
-            (column as f32 - x_shift) * SIZE,
+            (column as f32 - self.rect_x_shift as f32 - x_shift) * SIZE,
             (y_shift - row as f32) * SIZE,
         )
     }
 
     fn move_sand(&mut self, sand: &mut MovingSand) -> MoveStatus {
-        for option in sand.move_options() {
-            if let Some((row, column)) = option.make_step() {
-                if row >= self.visible_rect.column_len()
-                    || column >= self.visible_rect.row_len() + self.rect_x_shift
-                {
+        if !self.filled_with_sand {
+            for option in sand.move_options() {
+                if let Some((row, column)) = option.make_step() {
+                    if !self.inside_rect((row, column)) {
+                        return MoveStatus::Out;
+                    }
+                    if self.visible_rect[(row, column - self.rect_x_shift)] == CaveChunk::Air {
+                        sand.row = row;
+                        sand.column = column;
+                        return MoveStatus::Success;
+                    }
+                } else {
                     return MoveStatus::Out;
                 }
-                if self.visible_rect[(row, column - self.rect_x_shift)] == CaveChunk::Air {
-                    sand.row = row;
-                    sand.column = column;
-                    return MoveStatus::Success;
-                }
-            } else {
-                return MoveStatus::Out;
             }
+            self.visible_rect[(sand.row, sand.column - self.rect_x_shift)] = CaveChunk::Sand;
+
+            MoveStatus::Stop
+        } else {
+            for option in sand.move_options() {
+                if let Some((row, column)) = option.make_step() {
+                    if self.inside_rect((row, column)) {
+                        if self.visible_rect[(row, column - self.rect_x_shift)] == CaveChunk::Air {
+                            sand.row = row;
+                            sand.column = column;
+                            return MoveStatus::Success;
+                        }
+                    } else {
+                        if *self
+                            .additional_chunks
+                            .get(&row)
+                            .and_then(|row| row.get(&column))
+                            .unwrap_or(&CaveChunk::Air)
+                            == CaveChunk::Air
+                        {
+                            if row != self.visible_rect.column_len() + 1 {
+                                sand.row = row;
+                                sand.column = column;
+                                return MoveStatus::Success;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if self.inside_rect((sand.row, sand.column)) {
+                self.visible_rect[(sand.row, sand.column - self.rect_x_shift)] = CaveChunk::Sand;
+            } else {
+                if let Some(map) = self.additional_chunks.get_mut(&sand.row) {
+                    map.insert(sand.column, CaveChunk::Sand);
+                } else {
+                    self.additional_chunks
+                        .insert(sand.row, BTreeMap::from([(sand.column, CaveChunk::Sand)]));
+                }
+            }
+
+            MoveStatus::Stop
         }
+    }
 
-        self.visible_rect[(sand.row, sand.column - self.rect_x_shift)] = CaveChunk::Sand;
-
-        MoveStatus::Stop
+    fn inside_rect(&self, (row, column): (usize, usize)) -> bool {
+        (0..self.visible_rect.column_len()).contains(&row)
+            && (self.rect_x_shift..(self.visible_rect.row_len() + self.rect_x_shift))
+                .contains(&column)
     }
 
     pub fn sand_count(&self) -> usize {
@@ -98,6 +144,19 @@ impl Cave {
             .rows_iter()
             .map(|row| row.filter(|chunk| **chunk == CaveChunk::Sand).count())
             .sum()
+    }
+
+    pub fn sand_total(&self) -> usize {
+        let sand_in_additional: usize = self
+            .additional_chunks
+            .iter()
+            .map(|(_, row)| {
+                row.iter()
+                    .filter(|(_, chunk)| **chunk == CaveChunk::Sand)
+                    .count()
+            })
+            .sum();
+        self.sand_count() + sand_in_additional
     }
 
     pub fn fill_with_sand(&mut self) {
@@ -113,6 +172,30 @@ impl Cave {
                         break 'outer;
                     }
                     MoveStatus::Stop => {
+                        break;
+                    }
+                    MoveStatus::Success => {}
+                }
+            }
+        }
+    }
+
+    pub fn fill_completely(&mut self) {
+        if !self.filled_with_sand {
+            return;
+        }
+
+        'outer: loop {
+            let mut sand = MovingSand::default();
+            loop {
+                match self.move_sand(&mut sand) {
+                    MoveStatus::Out => {
+                        break 'outer;
+                    }
+                    MoveStatus::Stop => {
+                        if sand.row == 0 && sand.column == 500 {
+                            break 'outer;
+                        }
                         break;
                     }
                     MoveStatus::Success => {}
@@ -199,6 +282,7 @@ impl FromStr for Cave {
             visible_rect,
             rect_x_shift: min_x,
             filled_with_sand: false,
+            additional_chunks: BTreeMap::new(),
         })
     }
 }
@@ -221,7 +305,8 @@ pub fn render_cave(
 
         for (row_index, row) in cave.visible_rect.rows_iter().enumerate() {
             for (column_index, chunk) in row.enumerate() {
-                let (x, y) = cave.table_coord_to_world((row_index, column_index));
+                let (x, y) =
+                    cave.table_coord_to_world((row_index, column_index + cave.rect_x_shift));
                 if let CaveChunk::Wall = chunk {
                     commands.spawn(PbrBundle {
                         transform: Transform::from_translation(vec3(x, y, 0.)),
@@ -286,18 +371,36 @@ impl MoveOptions {
     }
 }
 
+#[derive(Resource)]
+pub struct CaveStatistics {
+    pub without_floor: usize,
+    pub at_all: usize,
+}
+
+impl CaveStatistics {
+    pub fn new() -> Self {
+        Self {
+            without_floor: 0,
+            at_all: 0,
+        }
+    }
+}
+
+#[derive(Component)]
+pub struct NeedsToBeFilled;
+
+#[derive(Component)]
+pub struct FilledCave;
+
 pub fn move_sand(
     mut commands: Commands,
-    mut caves: Query<&mut Cave>,
+    mut caves: Query<(Entity, &mut Cave), Without<NeedsToBeFilled>>,
     mut moving_sand: Query<(Entity, &mut MovingSand, &mut Transform)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut cave_statistics: ResMut<CaveStatistics>,
 ) {
-    for mut cave in caves.iter_mut() {
-        if cave.filled_with_sand {
-            continue;
-        }
-
+    for (cave_entity, mut cave) in caves.iter_mut() {
         let mut any = false;
         let mut need_new_sand = false;
         for (entity, mut sand, mut transform) in moving_sand.iter_mut() {
@@ -306,40 +409,103 @@ pub fn move_sand(
                 MoveStatus::Out => {
                     commands.entity(entity).despawn();
 
+                    cave_statistics.without_floor = cave.sand_count();
                     info!("Cannot add new sand!");
-                    info!("Sand count: {}", cave.sand_count());
+                    info!("Sand count: {}", cave_statistics.without_floor);
                     cave.filled_with_sand = true;
+
+                    commands.entity(cave_entity).insert(NeedsToBeFilled);
                 }
                 MoveStatus::Stop => {
                     commands.entity(entity).remove::<MovingSand>();
                     need_new_sand = true;
                 }
                 MoveStatus::Success => {
-                    let (x, y) =
-                        cave.table_coord_to_world((sand.row, sand.column - cave.rect_x_shift));
+                    let (x, y) = cave.table_coord_to_world((sand.row, sand.column));
                     transform.translation = vec3(x, y, SIZE);
                 }
             }
         }
         if !any || need_new_sand {
-            let (x, y) = cave.table_coord_to_world((0, 500 - cave.rect_x_shift));
-            commands.spawn((
-                PbrBundle {
-                    mesh: meshes.add(Mesh::from(UVSphere {
-                        radius: 0.2,
-                        sectors: 4,
-                        stacks: 4,
-                    })),
-                    material: materials.add(StandardMaterial {
-                        metallic: 0.,
-                        reflectance: 0.,
-                        ..Color::rgb(0.4, 0.9, 0.4).into()
-                    }),
-                    transform: Transform::from_translation(vec3(x, y, SIZE)),
-                    ..Default::default()
-                },
-                MovingSand::default(),
-            ));
+            spawn_sand(
+                &mut commands,
+                &mut meshes,
+                &mut materials,
+                &mut cave,
+                (0, 500),
+            );
         }
     }
+}
+
+const MOVE_SAND_AT_ONCE: usize = 1000;
+
+pub fn fill_cave_with_sand_completely(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut caves: Query<(Entity, &mut Cave), (With<NeedsToBeFilled>, Without<FilledCave>)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut cave_statistics: ResMut<CaveStatistics>,
+) {
+    let amount_to_check = (time.delta_seconds() * MOVE_SAND_AT_ONCE as f32).ceil() as usize;
+    for (entity, mut cave) in caves.iter_mut() {
+        'outer: for _ in 0..amount_to_check {
+            let mut sand = MovingSand::default();
+            loop {
+                match cave.move_sand(&mut sand) {
+                    MoveStatus::Out => {
+                        break 'outer;
+                    }
+                    MoveStatus::Stop => {
+                        if sand.row == 0 && sand.column == 500 {
+                            dbg!("Here!");
+                            commands.entity(entity).insert(FilledCave);
+
+                            cave_statistics.at_all = cave.sand_total();
+                            info!("Cannot add new sand at all");
+                            info!("Sand count: {}", cave_statistics.at_all);
+
+                            break 'outer;
+                        }
+                        break;
+                    }
+                    MoveStatus::Success => {}
+                }
+            }
+            spawn_sand(
+                &mut commands,
+                &mut meshes,
+                &mut materials,
+                &mut cave,
+                (sand.row, sand.column),
+            );
+        }
+    }
+}
+
+fn spawn_sand(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+    cave: &mut Mut<Cave>,
+    (row, column): (usize, usize),
+) {
+    let (x, y) = cave.table_coord_to_world((row, column));
+    commands.spawn((
+        PbrBundle {
+            mesh: meshes.add(Mesh::from(Quad {
+                size: vec2(SIZE, SIZE),
+                flip: false,
+            })),
+            material: materials.add(StandardMaterial {
+                metallic: 0.,
+                reflectance: 0.,
+                ..Color::rgb(0.4, 0.9, 0.4).into()
+            }),
+            transform: Transform::from_translation(vec3(x, y, SIZE)),
+            ..Default::default()
+        },
+        MovingSand::default(),
+    ));
 }

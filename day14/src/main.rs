@@ -1,10 +1,13 @@
-use crate::cave::{move_sand, render_cave, Cave};
+use crate::cave::{fill_cave_with_sand_completely, move_sand, render_cave, Cave, CaveStatistics};
 use advent_util::read_input;
+use bevy::diagnostic::{
+    EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin,
+};
 use bevy::math::vec3;
 use bevy::prelude::{
     App, Camera3dBundle, Commands, CoreStage, DirectionalLight, DirectionalLightBundle, Msaa,
-    Plugin, PluginGroup, Quat, Query, StartupStage, SystemStage, Transform, WindowDescriptor,
-    WindowPlugin,
+    Plugin, PluginGroup, Quat, Query, ResMut, StartupStage, SystemStage, Transform,
+    WindowDescriptor, WindowPlugin,
 };
 use bevy::time::FixedTimestep;
 use bevy::DefaultPlugins;
@@ -41,24 +44,40 @@ impl Plugin for CavePlugin {
                     CoreStage::Update,
                     "fixed_update",
                     SystemStage::parallel()
-                        .with_run_criteria(FixedTimestep::step(0.001))
+                        .with_run_criteria(FixedTimestep::step(0.0001))
                         .with_system(move_sand),
-                );
+                )
+                .add_system(fill_cave_with_sand_completely)
+                .add_plugin(FrameTimeDiagnosticsPlugin::default())
+                .add_plugin(LogDiagnosticsPlugin::default())
+                .add_plugin(EntityCountDiagnosticsPlugin::default())
+                .insert_resource(CaveStatistics::new());
         } else {
-            app.add_stage(
-                "Begin",
-                SystemStage::single_threaded().with_system(debug_println_cave),
-            )
-            .add_stage_after(
-                "Begin",
-                "Fill",
-                SystemStage::single_threaded().with_system(fill_with_sand),
-            )
-            .add_stage_after(
-                "Fill",
-                "Result Print",
-                SystemStage::single_threaded().with_system(debug_println_cave),
-            );
+            app.insert_resource(CaveStatistics::new())
+                .add_stage(
+                    "Begin",
+                    SystemStage::single_threaded().with_system(debug_println_cave),
+                )
+                .add_stage_after(
+                    "Begin",
+                    "Fill",
+                    SystemStage::single_threaded().with_system(fill_with_sand),
+                )
+                .add_stage_after(
+                    "Fill",
+                    "Result Print",
+                    SystemStage::single_threaded().with_system(debug_println_cave),
+                )
+                .add_stage_after(
+                    "Result Print",
+                    "Fill Completely",
+                    SystemStage::single_threaded().with_system(fill_with_sand_completely),
+                )
+                .add_stage_after(
+                    "Fill Completely",
+                    "Result Result print",
+                    SystemStage::single_threaded().with_system(debug_println_cave),
+                );
         }
     }
 }
@@ -90,10 +109,28 @@ fn debug_println_cave(query: Query<&Cave>) {
     }
 }
 
-fn fill_with_sand(mut caves: Query<&mut Cave>) {
+fn fill_with_sand(mut caves: Query<&mut Cave>, mut cave_statistics: ResMut<CaveStatistics>) {
     for mut cave in caves.iter_mut() {
         cave.fill_with_sand();
 
-        println!("Sand count: {}", cave.sand_count());
+        cave_statistics.without_floor = cave.sand_count();
+        println!("Sand count: {}", cave_statistics.without_floor);
+    }
+}
+
+fn fill_with_sand_completely(
+    mut caves: Query<&mut Cave>,
+    mut cave_statistics: ResMut<CaveStatistics>,
+) {
+    for mut cave in caves.iter_mut() {
+        cave.fill_completely();
+
+        cave_statistics.at_all = cave.sand_total();
+
+        println!("Sand count: {}", cave_statistics.at_all);
+        println!(
+            "New sand: {}",
+            cave_statistics.at_all - cave_statistics.without_floor
+        );
     }
 }
